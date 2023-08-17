@@ -1,4 +1,4 @@
-"Code Wizard 🧙‍♂️ | Pixel Enthusiast 🎨 | Problem Solver 🧩
+"Code Wizard 🧙‍♂️ |  Problem Solver 🧩
 
 🌟 Transforming lines of code into digital wonders.
 🔮 Passionate about crafting elegant solutions.
