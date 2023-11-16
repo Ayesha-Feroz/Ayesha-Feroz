@@ -1,0 +1,42 @@
+mport csv
+from pyopenms import AASequence, Residue
+
+def calculate_ion_series(sequence, ion_type):
+    aa_sequence = AASequence.fromString(sequence)
+    ions = []
+    mass_h2o = 18.01056  # Mass of water to subtract from b-ion mass for each fragment
+
+    if ion_type == 'b':
+        for i in range(1, aa_sequence.size() + 1):
+            ion = aa_sequence.getPrefix(i)
+            ions.append(ion.getMonoWeight(Residue.ResidueType.Full, 1) - mass_h2o)
+    elif ion_type == 'y':
+        for i in range(1, aa_sequence.size() + 1):
+            ion = aa_sequence.getSuffix(i)
+            ions.append(ion.getMonoWeight(Residue.ResidueType.Full, 1))
+
+    return ions
+
+def write_ions_to_csv(sequence, filename):
+    b_ions = calculate_ion_series(sequence, 'b')
+    y_ions = calculate_ion_series(sequence, 'y')
+    all_ions = b_ions + y_ions
+
+    with open(filename, 'w', newline='') as csvfile:
+        fieldnames = ['MonoisotopicMass']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        writer.writeheader()
+        for mass in all_ions:
+            writer.writerow({'MonoisotopicMass': f"{mass:.4f}"})
+
+def main():
+    sequence_input = input("Please enter the peptide sequence: ").upper()
+
+    # We will calculate both b and y ions and write them to the CSV
+    output_filename = "/Users/ayeshaferoz/Downloads/massestest1.csv"
+    write_ions_to_csv(sequence_input, output_filename)
+    print(f"All b and y ion masses for the sequence {sequence_input} have been written to {output_filename}")
+
+if __name__ == "__main__":
+    main()
