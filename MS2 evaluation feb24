@@ -1,0 +1,93 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+
+# Load the deconvolved CSV file
+deconvolved_df = pd.read_csv('/content/CA,res70k,noise1e3,b,y_centroid_ms2.tsv', sep='\t')  # Replace with the path to your deconvolved CSV file
+
+# Load the true masses CSV file
+true_masses_df = pd.read_csv('/content/b,yions.csv')  # Replace with the path to your true masses CSV file
+
+# Define ppm tolerance
+ppm_tolerance = 10  # Adjust as needed
+
+# Filter deconvolved_df for rows where TargetDummyType is 0
+filtered_deconvolved_df = deconvolved_df[deconvolved_df['TargetDecoyType'] == 0]
+
+# Initialize empty lists for true positives, false positives, and dummy masses
+true_positives = []
+false_positives = []
+dummy_masses = []
+
+# Iterate through rows in filtered_deconvolved_df
+for index, row in filtered_deconvolved_df.iterrows():
+    # Calculate ppm difference between each MonoisotopicMass in filtered_deconvolved_df
+    # and true_masses_df and check if it's within ppm_tolerance or ±1 isotope error
+    ppm_diff = abs(row['MonoisotopicMass'] - true_masses_df['MonoisotopicMass']) / true_masses_df['MonoisotopicMass'] * 1e6
+    isotope_error = abs(row['MonoisotopicMass'] - true_masses_df['MonoisotopicMass'] + 1) / true_masses_df['MonoisotopicMass'] * 1e6
+    matches_within_tolerance = any((ppm_diff <= ppm_tolerance) | (isotope_error <= ppm_tolerance))
+
+    # Classify the rows based on matching criteria
+    if matches_within_tolerance:
+        true_positives.append(row)
+    else:
+        false_positives.append(row)
+
+# Filter the deconvolved_df for rows where TargetDummyType is greater than 0
+dummy_masses_df = deconvolved_df[deconvolved_df['TargetDecoyType'] > 0]
+
+# Convert true_positives and false_positives to dataframes
+true_positives_df = pd.DataFrame(true_positives)
+false_positives_df = pd.DataFrame(false_positives)
+
+# Create ECDF plots based on Qscore
+plt.figure(figsize=(12, 10))
+
+# Function to calculate ECDF
+def ecdf(data):
+    x = np.sort(data)
+    y = np.arange(1, len(data) + 1) / len(data)
+    return x, y
+
+# Create ECDF plots for True Positives, False Positives, and Dummy Masses
+for data, label, color in [(true_positives_df['Qscore'], 'True positive masses', 'green'),
+                           (false_positives_df['Qscore'], 'False positive masses', 'red'),
+                           (dummy_masses_df['Qscore'], 'Decoy masses', 'blue')]:
+    x, y = ecdf(data)
+    plt.plot(x, y, marker='.', linestyle='none', label=label, color=color)
+
+plt.xlabel('Qscore', fontsize=15)
+plt.ylabel('ECDF', fontsize=15)
+plt.title('ECDF Plot for Resoultion= 240k,noise=1e5,b,y', fontsize=15)
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# Sort the dataframes based on Qscore for FDR calculation
+true_positives_df.sort_values(by='Qscore', ascending=False, inplace=True)
+false_positives_df.sort_values(by='Qscore', ascending=False, inplace=True)
+
+# Calculate the estimated FDR using q-values
+total_decoy = len(dummy_masses_df)
+true_positives_df['Qvalue'] = np.cumsum(true_positives_df['TargetDecoyType'] == 0) / np.arange(1, len(true_positives_df) + 1)
+false_positives_df['Qvalue'] = np.cumsum(false_positives_df['TargetDecoyType'] == 0) / np.arange(1, len(false_positives_df) + 1)
+
+# Interpolate q-values to have the same length for plotting
+common_length = min(len(true_positives_df['Qvalue']), len(false_positives_df['Qvalue']))
+interpolated_qvalues_true = np.interp(np.linspace(0, 1, common_length), np.linspace(0, 1, len(true_positives_df['Qvalue'])), true_positives_df['Qvalue'])
+interpolated_qvalues_false = np.interp(np.linspace(0, 1, common_length), np.linspace(0, 1, len(false_positives_df['Qvalue'])), false_positives_df['Qvalue'])
+
+# Create a scatter plot of estimated FDR vs true FDR
+plt.figure(figsize=(8, 6))
+plt.scatter(interpolated_qvalues_true, interpolated_qvalues_false, color='blue', alpha=0.5)
+plt.plot([0, 1], [0, 1], linestyle='--', color='red', linewidth=2)  # Diagonal line for reference
+plt.xlabel('Estimated FDR')
+plt.ylabel('True FDR')
+plt.title('Estimated FDR vs True FDR')
+plt.xlim(0, 1)
+plt.ylim(0, 1)
+plt.grid(True)
+plt.tight_layout()
+plt.show()
